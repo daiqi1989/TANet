@@ -435,5 +435,5 @@ if __name__ == "__main__":
     print(os.getcwd())
     tuner_params = nni.get_next_parameter()
     params = vars(merge_parameter(opt, tuner_params))
-    print(opt)
+    print(vars(opt))
     start_train(params)
