@@ -5,19 +5,21 @@ import numpy as np
 import math
 import torch.optim as optim
 import option
-import nni
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from torch.nn import functional as F
 from torchvision import models
-from dataset import AVADataset
+from dataset import TestDataset
 from util import EDMLoss, AverageMeter
-from tensorboardX import SummaryWriter
+
 from tqdm import tqdm
 from scipy.stats import pearsonr
 from scipy.stats import spearmanr
 from sklearn.metrics import accuracy_score
-from nni.utils import merge_parameter
+
+import wandb
+
+
 opt = option.init()
 device = torch.device("cuda:0")
 MOBILE_NET_V2_UTR = 'https://s3-us-west-1.amazonaws.com/models-nima/mobilenetv2.pth.tar'
@@ -150,11 +152,11 @@ def resnet365_backbone():
 
     return last_model
 
-def mobile_net_v2(pretrained=False):
+def mobile_net_v2(pretrained=True):
     model = MobileNetV2()
     if pretrained:
         print("read mobilenet weights")
-        path_to_model = '/root/tmp/pycharm_project_815/M_M_Semi-Supervised/code/AVA/pretrain_model/mobilenetv2.pth.tar'
+        path_to_model = './mobilenetv2.pth.tar'
         state_dict = torch.load(path_to_model, map_location=lambda storage, loc: storage)
         model.load_state_dict(state_dict)
     return model
@@ -321,74 +323,70 @@ def get_score(opt, y_pred):
     return score, score_np
 
 def create_data_part(opt):
-    train_csv_path = os.path.join(opt['path_to_save_csv'], 'train.csv')
-    val_csv_path = os.path.join(opt['path_to_save_csv'], 'val.csv')
-    test_csv_path = os.path.join(opt['path_to_save_csv'], 'test.csv')
+    test_csv_path = opt['path_to_save_csv']
 
-    train_ds = AVADataset(train_csv_path, opt['path_to_images'], if_train=True)
-    val_ds = AVADataset(val_csv_path, opt['path_to_images'], if_train=False)
-    test_ds = AVADataset(test_csv_path, opt['path_to_images'], if_train=False)
-
-    train_loader = DataLoader(train_ds, batch_size=opt['batch_size'], num_workers=opt['num_workers'], shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=opt['batch_size'], num_workers=opt['num_workers'], shuffle=False)
+    test_ds = TestDataset(test_csv_path, opt['path_to_images'], if_train=False)
     test_loader = DataLoader(test_ds, batch_size=opt['batch_size'], num_workers=opt['num_workers'], shuffle=False)
 
-    return train_loader, val_loader, test_loader
+    return test_loader
 
-def train(opt, model, loader, optimizer, criterion, writer=None, global_step=None, name=None):
-    model.train()
-
-    # Freeze
-    for name, param in model.named_parameters():
-        if name[:11] == "res365_last":
-            param.requires_grad = False
-        else:
-            param.requires_grad = True
-
-    train_losses = AverageMeter()
-    for idx, (x, y) in enumerate(tqdm(loader)):
-        x = x.type(torch.FloatTensor).to(device)
-        y = y.to(device).view(y.size(0), -1).float()
-        y_pred = model(x).float()
-        loss = criterion(y_pred, y)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        train_losses.update(loss.item(), x.size(0))
-    return train_losses.avg
-
-def validate(opt,model, loader, criterion, writer=None, global_step=None, name=None, test_or_valid_flag = 'test'):
+def validate(opt,model, loader, criterion, writer=None, global_step=None, name=None, test_or_valid_flag = 'test', ):
     model.eval()
     validate_losses = AverageMeter()
     torch.set_printoptions(precision=3)
     true_score = []
     pred_score = []
 
-    for idx, (x, y) in enumerate(tqdm(loader)):
+    examples = []
+
+    run_config = {
+        "name": 'TANet aesthetics eval',
+        "model": 'SRCC_758_LCC_765'
+    }
+    run = wandb.init(config=run_config, project="aesthetics eval", name="name_" + str(run_config["name"]) + "_model_" + str(run_config["model"]) )
+
+    tbl = wandb.Table(columns=["image", "score"])
+
+    for idx, (x, x_orig) in enumerate(tqdm(loader)):
         x = x.type(torch.FloatTensor).to(device)
-        y = y.to(device).view(y.size(0), -1)
+        # print(x.shape)
+        # print(x_orig.shape)
+        # y = y.to(device).view(y.size(0), -1)
         y_pred = model(x)
         pscore, pscore_np = get_score(opt, y_pred)
-        tscore, tscore_np = get_score(opt, y)
+        # tscore, tscore_np = get_score(opt, y)
         pred_score += pscore_np.tolist()
-        true_score += tscore_np.tolist()
-        loss = criterion(y_pred, y).float()
-        validate_losses.update(loss.item(), x.size(0))
+        x_orig = x_orig.permute([0,2,3,1])
+        for batch_i in range(x_orig.shape[0]):
+            tmp_img = x_orig[batch_i,:]
+            sample = wandb.Image(tmp_img.numpy())
+            tbl.add_data(sample, pscore_np[batch_i])
 
-    lcc_mean = pearsonr(pred_score, true_score)
-    srcc_mean = spearmanr(pred_score, true_score)
-    true_score = np.array(true_score)
-    true_score_lable = np.where(true_score <= 5.00, 0, 1)
+        # tbl.add_data(sample, pscore_np)
+        # examples.append(sample)
+        # true_score += tscore_np.tolist()
+        # loss = criterion(y_pred, y).float()
+        # validate_losses.update(loss.item(), x.size(0))
+
+    # lcc_mean = pearsonr(pred_score, true_score)
+    # srcc_mean = spearmanr(pred_score, true_score)
+    # true_score = np.array(true_score)
+    # true_score_lable = np.where(true_score <= 5.00, 0, 1)
     pred_score = np.array(pred_score)
+    print("shape: ")
+    print(pred_score.shape)
     pred_score_lable = np.where(pred_score <= 5.00, 0, 1)
-    acc = accuracy_score(true_score_lable, pred_score_lable)
-    print('{}, accuracy: {}, lcc_mean: {}, srcc_mean: {}, validate_losses: {}'.format(test_or_valid_flag, acc,
-                                                                                      lcc_mean[0], srcc_mean[0],
-                                                                                      validate_losses.avg))
-    return validate_losses.avg, acc, lcc_mean, srcc_mean
+
+    run.log({"Vis scores": tbl})
+    
+    # acc = accuracy_score(true_score_lable, pred_score_lable)
+    # print('{}, accuracy: {}, lcc_mean: {}, srcc_mean: {}, validate_losses: {}'.format(test_or_valid_flag, acc,
+                                                                                    #   lcc_mean[0], srcc_mean[0],
+                                                                                    #   validate_losses.avg))
+    return pred_score, pred_score_lable
 
 def start_train(opt):
-    dataloader_train, dataloader_valid, dataloader_test = create_data_part(opt)
+    dataloader_test = create_data_part(opt)
     criterion = EDMLoss()
     criterion.to(device)
     model = TANet()
@@ -396,21 +394,13 @@ def start_train(opt):
     model.load_state_dict(torch.load(opt['path_to_model_weight'], map_location='cuda:0'))
     model = model.to(device)
 
-    optimizer = optim.Adam([
-        # {'params': other_params},
-        {'params': model.res365_last.parameters(), 'lr': opt['init_lr_res365_last']},
-        {'params': model.mobileNet.parameters(), 'lr': opt['init_lr_mobileNet']},
-        {'params': model.head.parameters(), 'lr': opt['init_lr_head']},
-        {'params': model.head_rgb.parameters(), 'lr': opt['init_lr_head_rgb']},
-        {'params': model.hypernet.parameters(), 'lr': opt['init_lr_hypernet']},
-        {'params': model.tygertnet.parameters(), 'lr': opt['init_lr_tygertnet']},
-    ], lr=opt['init_lr'])
+    
 
-    writer = SummaryWriter(log_dir=os.path.join(opt['experiment_dir_name'], 'logs'))
-    srcc_best = 0
-    vacc_best = 0
+    # writer = SummaryWriter(log_dir=os.path.join(opt['experiment_dir_name'], 'logs'))
+    # srcc_best = 0
+    # vacc_best = 0
 
-    for e in range(opt['num_epoch']):
+    # for e in range(opt['num_epoch']):
         # please set util.py r = 2 of EMD
         # train_loss = train(opt,model=model, loader=dataloader_train, optimizer=optimizer, criterion=criterion,
         #                    writer=writer, global_step=len(dataloader_train) * e,
@@ -420,19 +410,30 @@ def start_train(opt):
         #                     name=f"{opt['experiment_dir_name']}_by_batch", test_or_valid_flag='valid')
 
         # please set util.py r = 1 of EMD
-        test_loss, tacc, tlcc, tsrcc = validate(opt, model=model, loader=dataloader_test, criterion=criterion,
-                                                writer=writer, global_step=len(dataloader_test) * e,
-                                                name=f"{opt['experiment_dir_name']}_by_batch",
-                                                test_or_valid_flag='test')
-        nni.report_intermediate_result(
-            {'default': tacc, "vsrcc": tsrcc[0], "val_loss": test_loss})
-    nni.report_final_result({'default': tacc, "vsrcc": tsrcc[0]})
-    writer.close()
+
+    pred_score, pred_score_lable = validate(opt, model=model, loader=dataloader_test, criterion=criterion)
+    # nni.report_intermediate_result(
+    #     {'default': tacc, "vsrcc": tsrcc[0], "val_loss": test_loss})
+
+
+    
+    # nni.report_final_result({'default': tacc, "vsrcc": tsrcc[0]})
+    # writer.close()
 
 if __name__ == "__main__":
     import warnings
     warnings.filterwarnings('ignore')
     print(os.getcwd())
+
+    
+
     params = vars(opt)
     print(params)
+
+    # wandb init
+    
+
+    
+
+    
     start_train(params)

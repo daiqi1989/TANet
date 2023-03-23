@@ -1,0 +1,13 @@
+sudo docker run --name test1 --runtime=nvidia --shm-size=128g -it --ipc=host --net=host -v /home/qid/:/home/qid/ -v /scratch:/tmp zeliu98/pytorch:superbench-nvcr21.05-fixfusedlamb-itp-mmcv-msrest bash
+
+
+git clone https://github.com/daiqi1989/TANet.git
+
+
+accountName openseg
+accountKey 9fhoDNYPRFs8zc53B13GDqvEVynmOEe+RchBP8p5d6EWsU04LVfjs3+Q4ab7r2Pq9EXqylgYH28gVmLDk95hqQ==
+containerName video
+
+
+sudo blobfuse /home/qid/blob/hd_vila --tmp-path=/mnt/resource/blobfusetmp_qid --config-file=/home/qid/blob/hd_blob.cfg -o attr_timeout=240 -o entry_timeout=240 -o negative_timeout=120 -o allow_other --pre-mount-validate=true
+echo "mount pptdata successfully"

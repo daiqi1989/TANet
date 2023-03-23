@@ -50,3 +50,37 @@ class AVADataset(Dataset):
         x = self.transform(image)
 
         return x, p.astype('float32')
+    
+class TestDataset(Dataset):
+    def __init__(self, path_to_csv, images_path, if_train):
+        self.df = pd.read_csv(path_to_csv)
+        self.images_path = images_path
+        self.if_train = if_train
+        self.transform2 = transforms.Compose([transforms.ToTensor()])
+        if if_train:
+            self.transform = transforms.Compose([
+                # transforms.Resize((256, 256)),
+                transforms.RandomHorizontalFlip(),
+                # transforms.RandomCrop((224, 224)),
+                transforms.ToTensor(),
+                normalize])
+        else:
+            self.transform = transforms.Compose([
+                # transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                normalize])
+
+    def __len__(self):
+        return self.df.shape[0]
+
+    def __getitem__(self, item):
+        row = self.df.iloc[item]
+
+        image_name = row['image_name']
+        image_path = os.path.join(self.images_path, image_name)
+        image = default_loader(image_path)
+
+        image = image.resize((224, 224))
+        x = self.transform(image)
+
+        return x, self.transform2(image)

@@ -1,19 +1,18 @@
-import torch
+import pandas as pd
+import wandb
+import numpy as np
 
-x = torch.rand(5, 3)
-print(x)
+# df = pd.read_csv("C:\\Users\\qid\\Downloads\\hdvila\\sample_frame_list.txt")
+# print(df.shape[0])
+# print(df.iloc[1])
 
-if not torch.cuda.is_available():
-   print ("Cuda is available")
-   device_id = torch.cuda.current_device()
-   gpu_properties = torch.cuda.get_device_properties(device_id)
-   print("Found %d GPUs available. Using GPU %d (%s) of compute capability %d.%d with "
-          "%.1fGb total memory.\n" % 
-          (torch.cuda.device_count(),
-          device_id,
-          gpu_properties.name,
-          gpu_properties.major,
-          gpu_properties.minor,
-          gpu_properties.total_memory / 1e9))
-else:    
-   print ("Cuda is not available")
+wandb.init()
+
+pixels = np.random.randint(low=0, high=256, size=(48, 3, 224, 224))
+t = pixels[0,:]
+t=t.reshape((224,224,3))
+print(t.shape)
+
+
+image = wandb.Image(t)
+

@@ -1,0 +1,42 @@
+{
+    "os": "Windows-10-10.0.19041-SP0",
+    "python": "3.8.8",
+    "heartbeatAt": "2023-03-20T13:21:34.075478",
+    "startedAt": "2023-03-20T13:21:33.713984",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "d:/gitrepo/TANet/code/AVA/test_gpu.py",
+    "codePath": "code\\AVA\\test_gpu.py",
+    "git": {
+        "remote": "https://github.com/daiqi1989/TANet.git",
+        "commit": "cbcc08d4e4688c8de6728c6a36339fb914c92a37"
+    },
+    "email": "daiqi1989@gmail.com",
+    "root": "D:/gitrepo/TANet",
+    "host": "FZQD5K2",
+    "username": "qid",
+    "executable": "D:\\anaconda3\\python.exe",
+    "cpu_count": 4,
+    "cpu_count_logical": 8,
+    "cpu_freq": {
+        "current": 3408.0,
+        "min": 0.0,
+        "max": 3408.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 3408.0,
+            "min": 0.0,
+            "max": 3408.0
+        }
+    ],
+    "disk": {
+        "total": 1862.8906211853027,
+        "used": 1450.8028450012207
+    },
+    "memory": {
+        "total": 15.890380859375
+    }
+}
